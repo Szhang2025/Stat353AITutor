@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STAT 353 AI Tutor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --border: #2a2e37;
+    --text: #e8e9ec;
+    --muted: #9aa0ac;
+    --accent: #d97757;
+    --bot-bubble: #232631;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "IBM Plex Sans", -apple-system, Segoe UI, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #chat-container {
+    width: 100%;
+    max-width: 680px;
+    height: 92vh;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #chat-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  #chat-header h1 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  #chat-header p {
+    margin: 4px 0 0 0;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .msg {
+    max-width: 82%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    line-height: 1.45;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #1a1a1a;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.bot {
+    align-self: flex-start;
+    background: var(--bot-bubble);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.bot p { margin: 0 0 8px 0; }
+  .msg.bot p:last-child { margin-bottom: 0; }
+  .msg.bot ul, .msg.bot ol { margin: 4px 0 8px 0; padding-left: 20px; }
+  .msg.bot li { margin-bottom: 2px; }
+  .msg.bot code {
+    background: #12141a;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.88em;
+  }
+  .msg.bot pre {
+    background: #12141a;
+    padding: 10px 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+  .msg.bot pre code { background: none; padding: 0; }
+  .msg.bot strong { color: var(--text); }
+  .msg.bot a { color: var(--accent); }
+  .msg.bot .katex { font-size: 1.05em; }
+  .msg.bot .katex-display { margin: 8px 0; overflow-x: auto; overflow-y: hidden; }
+  .msg.error {
+    align-self: center;
+    color: #f87171;
+    font-size: 0.85rem;
+  }
+  .msg.thinking {
+    align-self: flex-start;
+    color: var(--muted);
+    font-style: italic;
+    background: none;
+    padding: 4px 6px;
+  }
+  #starter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 20px 14px 20px;
+  }
+  .starter-btn {
+    background: var(--bot-bubble);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 16px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .starter-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  #input-row {
+    display: flex;
+    padding: 14px;
+    border-top: 1px solid var(--border);
+    gap: 8px;
+  }
+  #user-input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #12141a;
+    color: var(--text);
+    font-size: 0.95rem;
+    resize: none;
+    outline: none;
+  }
+  #send-btn {
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #1a1a1a;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+<body>
+
+<div id="chat-container">
+  <div id="chat-header">
+    <h1>STAT 353 AI Tutor</h1>
+    <p>Statistical Methods for Engineering — ask about any course concept</p>
+  </div>
+  <div id="messages"></div>
+  <div id="starter-row">
+    <button class="starter-btn" data-q="How do I know whether to use a one-sample or two-sample t-test?">One- vs two-sample t-test?</button>
+    <button class="starter-btn" data-q="What's the difference between Type I and Type II error?">Type I vs Type II error</button>
+    <button class="starter-btn" data-q="Explain the Central Limit Theorem in simple terms.">Explain the CLT</button>
+    <button class="starter-btn" data-q="When do I use Welch's t-test instead of the pooled version?">Welch's vs pooled t-test</button>
+  </div>
+  <div id="input-row">
+    <textarea id="user-input" rows="1" placeholder="Ask a question about STAT 353..."></textarea>
+    <button id="send-btn">Send</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script>
+  // Paste your Apps Script Web App URL here (ends in /exec)
+  const API_URL = "https://script.google.com/macros/s/AKfycbzFu9po68U_0Byeb6ehiSH9KxaRrDcGhi-foKKJUdRJvnkjQGDHckKtFQ_8UD_78-sUJw/exec";
+
+  // Optional: only needed if you set SHARED_SECRET in the Apps Script file.
+  const SHARED_SECRET = "PUT-A-RANDOM-STRING-HERE";
+
+  const messagesEl = document.getElementById("messages");
+  const inputEl = document.getElementById("user-input");
+  const sendBtn = document.getElementById("send-btn");
+  const starterRow = document.getElementById("starter-row");
+
+  let sessionId = null; // set once the Managed Agent session is created
+
+  // Per-browser id used only for server-side rate limiting (not identity/auth).
+  function getClientId() {
+    let id = sessionStorage.getItem("stat353_client_id");
+    if (!id) {
+      id = "c_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      sessionStorage.setItem("stat353_client_id", id);
+    }
+    return id;
+  }
+
+  // --- Markdown + LaTeX rendering (same approach as the chatbox) -------------
+  function renderWithMath(text) {
+    const placeholders = [];
+    function stash(html) {
+      const token = "@@MATH" + placeholders.length + "@@";
+      placeholders.push(html);
+      return token;
+    }
+    let working = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, expr) => {
+      try { return stash(katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false })); }
+      catch (e) { return match; }
+    });
+    working = working.replace(/\$([^\$\n]+?)\$/g, (match, expr) => {
+      try { return stash(katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false })); }
+      catch (e) { return match; }
+    });
+    let html = marked.parse(working);
+    placeholders.forEach((mathHtml, i) => { html = html.replace("@@MATH" + i + "@@", mathHtml); });
+    return html;
+  }
+
+  function addMessage(role, text) {
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    if (role === "bot") {
+      div.innerHTML = renderWithMath(text);
+    } else {
+      div.textContent = text;
+    }
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  // --- Session lifecycle -------------------------------------------------
+  // A Managed Agent session must be created once, then reused for every
+  // message in the conversation so the agent keeps context.
+  async function ensureSession() {
+    if (sessionId) return sessionId;
+
+    const payload = { action: "start", clientId: getClientId() };
+    if (SHARED_SECRET) payload.secret = SHARED_SECRET;
+
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+
+    sessionId = data.session_id;
+    return sessionId;
+  }
+
+  async function sendMessage(text) {
+    if (!text) return;
+
+    addMessage("user", text);
+    inputEl.value = "";
+    sendBtn.disabled = true;
+    starterRow.style.display = "none";
+
+    const thinkingEl = addMessage("thinking", "Thinking...");
+
+    try {
+      const sid = await ensureSession();
+
+      const payload = { action: "message", session_id: sid, text: text, clientId: getClientId() };
+      if (SHARED_SECRET) payload.secret = SHARED_SECRET;
+
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      thinkingEl.remove();
+
+      if (data.error) {
+        addMessage("error", "Error: " + data.error);
+      } else {
+        addMessage("bot", data.reply || "(no response)");
+      }
+    } catch (err) {
+      thinkingEl.remove();
+      addMessage("error", "Request failed: " + err.message);
+    } finally {
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  sendBtn.addEventListener("click", () => sendMessage(inputEl.value.trim()));
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(inputEl.value.trim());
+    }
+  });
+  starterRow.addEventListener("click", (e) => {
+    if (e.target.classList.contains("starter-btn")) {
+      sendMessage(e.target.dataset.q);
+    }
+  });
+</script>
+
+</body>
+</html>
