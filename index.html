@@ -188,7 +188,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script>
   // Paste your Apps Script Web App URL here (ends in /exec)
-  const API_URL = "https://script.google.com/macros/s/AKfycbzFu9po68U_0Byeb6ehiSH9KxaRrDcGhi-foKKJUdRJvnkjQGDHckKtFQ_8UD_78-sUJw/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbxA6_yXwjdR_mbYZC2ORtldVr6168uJe6LfCoW2ZJs4TqIAcSG6BSGDQafhjtskz09m/exec";
 
   // Optional: only needed if you set SHARED_SECRET in the Apps Script file.
   const SHARED_SECRET = "PUT-A-RANDOM-STRING-HERE";
@@ -278,21 +278,31 @@
     try {
       const sid = await ensureSession();
 
-      const payload = { action: "message", session_id: sid, text: text, clientId: getClientId() };
-      if (SHARED_SECRET) payload.secret = SHARED_SECRET;
+      // Step 1: send the message. This returns fast - it does NOT wait for
+      // the agent's reply, just confirms the message was sent and gives us
+      // a baseline event count to check against.
+      const sendPayload = { action: "message", session_id: sid, text: text, clientId: getClientId() };
+      if (SHARED_SECRET) sendPayload.secret = SHARED_SECRET;
 
-      const response = await fetch(API_URL, {
+      const sendResponse = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(sendPayload)
       });
-      const data = await response.json();
+      const sendData = await sendResponse.json();
+      if (sendData.error) throw new Error(sendData.error);
+
+      // Step 2: poll for the reply ourselves, on the browser side, with
+      // short individual requests. This avoids Apps Script's own web-app
+      // request timeout, which is what caused "<!DOCTYPE" errors when the
+      // server tried to wait 30s in a single call.
+      const reply = await pollForReply(sid, sendData.baseline);
       thinkingEl.remove();
 
-      if (data.error) {
-        addMessage("error", "Error: " + data.error);
+      if (reply === null) {
+        addMessage("error", "Timed out waiting for a response. Try again.");
       } else {
-        addMessage("bot", data.reply || "(no response)");
+        addMessage("bot", reply);
       }
     } catch (err) {
       thinkingEl.remove();
@@ -301,6 +311,35 @@
       sendBtn.disabled = false;
       inputEl.focus();
     }
+  }
+
+  const CHECK_INTERVAL_MS = 1500;
+  const CHECK_TIMEOUT_MS = 45000; // overall client-side timeout for one answer
+
+  async function pollForReply(sessionId, baseline) {
+    const start = Date.now();
+
+    while (Date.now() - start < CHECK_TIMEOUT_MS) {
+      await new Promise(r => setTimeout(r, CHECK_INTERVAL_MS));
+
+      const checkPayload = { action: "check", session_id: sessionId, baseline: baseline, clientId: getClientId() };
+      if (SHARED_SECRET) checkPayload.secret = SHARED_SECRET;
+
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(checkPayload)
+      });
+      const data = await response.json();
+
+      if (data.error) throw new Error(data.error);
+      if (data.reply !== null && data.reply !== undefined) {
+        return data.reply;
+      }
+      // else: still pending, loop again
+    }
+
+    return null; // client-side timeout
   }
 
   sendBtn.addEventListener("click", () => sendMessage(inputEl.value.trim()));
@@ -315,6 +354,25 @@
       sendMessage(e.target.dataset.q);
     }
   });
+
+  // Log this page visit once per load. Fire-and-forget: we don't need to
+  // wait for or react to the response, and a failure here shouldn't affect
+  // the chat experience at all.
+  (function logVisit() {
+    const payload = {
+      action: "visit",
+      clientId: getClientId(),
+      page: "stat353_tutor",
+      userAgent: navigator.userAgent
+    };
+    if (SHARED_SECRET) payload.secret = SHARED_SECRET;
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }).catch(() => { /* silently ignore - visit logging is non-critical */ });
+  })();
 </script>
 
 </body>
